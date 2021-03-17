@@ -1,9 +1,12 @@
 const express = require('express');
 const request = require('request');
 const cheerio = require('cheerio');
+const Regex = require('regex');
 const Q = require('q');
 const { EventEmitter } = require('events');
-const fs = require('fs')
+const fs = require('fs');
+const { async } = require('q');
+const { getHeapCodeStatistics } = require('v8');
 
 const currysGpuUrls = ['https://www.currys.co.uk/gbuk/computing-accessories/components-upgrades/graphics-cards/msi-geforce-gtx-1660-super-6-gb-gaming-x-graphics-card-10200631-pdt.html',
 'https://www.currys.co.uk/gbuk/computing-accessories/components-upgrades/graphics-cards/msi-geforce-gtx-1660-ti-6-gb-ventus-xs-oc-graphics-card-10191506-pdt.html',
@@ -33,6 +36,10 @@ const app = express();
 
 var emitter = new EventEmitter();
 emitter.setMaxListeners(0);
+var currysGpuPrices = []
+var currysGpuNames = []
+
+var regex = new Regex("^https:\/\/www.currys.co.uk")
 
 app.get('/', function(req, res) {
 var results = []
@@ -48,38 +55,58 @@ function processUrls(url) {
 
   request(url, function(error, response, html) {
     if (!error) {
+      console.log(regex.test(url))
       const $ = cheerio.load(html);
+      if(url )
       stock = $('i.dcg-icon-cross').hasClass('dcg-icon-cross');
+      name = $('h1.page-title.nosp').text();
+
+      // console.log(name)
+      currysGpuNames.push(name)
 
       if (!stock){
         stock = "Not in Stock"
-        console.log("Not in Stock")
+        // console.log("Not in Stock")
       }else{
         currysPrices = $('div.amounts > div.prd-amounts > div > strong.current').text()
         currysPrices = currysPrices.substring(0,7)
-        //deffered.resolve('Price: ' + currysPrices)
-        currysPrices = JSON.stringify(currysPrices);
-        fs.writeFileSync('prices.json', currysPrices)
-        //results.price = currysPrices;
-        console.log(currysPrices)
+        currysGpuPrices.push(currysPrices)
+        storeData(name, currysGpuPrices)
+        fs.writeFileSync("data.json", JSON.stringify(currysGpuNames+currysGpuPrices))
+        // console.log(currysPrices)
       }
     }else{
       deffered.reject(error)
-      console.log("We've encountered an error: " + error)
+      // console.log("We've encountered an error: " + error)
     }
 
 });
 }
+var data = {}
 
 //console.log(currysPrices)
 
 Q.all(results.map(function(i){i.promise})).then(sendResponse).catch(sendError);
+
+function storeData(name, prices){
+  data = {
+    name: name,
+    price: prices
+  }
+  console.log(data)
+  return data;
+}
+
+async function getData(){
+  console.log(data)
+}
 
 function sendError(error){
   res.status(500).json({failed: error});
 }
 
 function sendResponse(data){
+  //getData()
   return res.send(results)
 }
 });
