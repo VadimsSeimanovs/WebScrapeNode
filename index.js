@@ -6,7 +6,6 @@ const Q = require('q');
 const { EventEmitter } = require('events');
 const fs = require('fs');
 const { async } = require('q');
-const { getHeapCodeStatistics } = require('v8');
 
 const currysGpuUrls = ['https://www.currys.co.uk/gbuk/computing-accessories/components-upgrades/graphics-cards/msi-geforce-gtx-1660-super-6-gb-gaming-x-graphics-card-10200631-pdt.html',
 'https://www.currys.co.uk/gbuk/computing-accessories/components-upgrades/graphics-cards/msi-geforce-gtx-1660-ti-6-gb-ventus-xs-oc-graphics-card-10191506-pdt.html',
@@ -35,13 +34,13 @@ const amazonGpu = ['https://www.amazon.co.uk/dp/B07ZPM2BVR/ref=olp_aod_redir#aod
 const app = express();
 
 var emitter = new EventEmitter();
-emitter.setMaxListeners(0);
 var currysGpuPrices = []
 var currysGpuNames = []
 
 var regex = new Regex("^https:\/\/www.currys.co.uk")
 
 app.get('/', function(req, res) {
+emitter.setMaxListeners(0);
 var results = []
 currysGpuUrls.forEach(processUrls);                                                                                                    
 function processUrls(url) {
@@ -54,51 +53,49 @@ function processUrls(url) {
   results.push(result);
 
   request(url, function(error, response, html) {
+    if(response.statusCode >= 200 || response.statusCode <= 299){
     if (!error) {
-      console.log(regex.test(url))
+      //console.log(regex.test(url))
       const $ = cheerio.load(html);
       if(url )
-      stock = $('i.dcg-icon-cross').hasClass('dcg-icon-cross');
-      name = $('h1.page-title.nosp').text();
+      stock = $('div.amounts')
+      //console.log(stock)
 
-      // console.log(name)
+       // Name processing
+      name = $('h1.page-title.nosp').text();
+      name = name.replace(/\s{2,}/g, ' ').replace(/^\s/, '')
       currysGpuNames.push(name)
 
       if (!stock){
         stock = "Not in Stock"
-        // console.log("Not in Stock")
+        console.log("Not in Stock") //Testing purposes
       }else{
         currysPrices = $('div.amounts > div.prd-amounts > div > strong.current').text()
         currysPrices = currysPrices.substring(0,7)
-        currysGpuPrices.push(currysPrices)
-        storeData(name, currysGpuPrices)
-        fs.writeFileSync("data.json", JSON.stringify(currysGpuNames+currysGpuPrices))
-        // console.log(currysPrices)
+        storeData(name, currysPrices)
+        //fs.writeFileSync("data.json", JSON.stringify(currysGpuNames+currysGpuPrices)) Here wtire to the JSON file but this is not the case I need to write in the seperate method
       }
     }else{
       deffered.reject(error)
-      // console.log("We've encountered an error: " + error)
+      console.log("We've encountered an error: " + error)
     }
+  }else{
+    console.log(response.statusCode)
+  }
 
 });
 }
 var data = {}
 
-//console.log(currysPrices)
-
 Q.all(results.map(function(i){i.promise})).then(sendResponse).catch(sendError);
 
-function storeData(name, prices){
+async function storeData(name, prices){
   data = {
     name: name,
     price: prices
-  }
+    }
   console.log(data)
   return data;
-}
-
-async function getData(){
-  console.log(data)
 }
 
 function sendError(error){
@@ -106,39 +103,10 @@ function sendError(error){
 }
 
 function sendResponse(data){
-  //getData()
   return res.send(results)
 }
 });
 
-// function populateJSON(companyName, gpuName, gpuPrice){
-//   var gpuStock = {
-//     company: companyName,
-//     name: gpuName,
-//     price: gpuPrice
-//   }
-
-  
-// }
-
-// app.get('/', function(req, res) {
-//   let url = 'https://www.bbcgoodfood.com/recipes/';
-
-//   request(url, function(error, response, html) {
-//       if (!error) {
-//         const $ = cheerio.load(html);
-//         foodName = $('h4.standard-card-new__display-title');
-        
-//         foodName.each(function() {
-//           const name = $(this).find('a.standard-card-new__article-title').text();
-//           foods.push({
-//             name: name.toLowerCase().replace(/\s+/g, "-")
-//           })
-//         })
-//         console.log(foods)
-//       }
-//   });
-// });
 app.listen('8080');
 console.log('API is running on http://localhost:8080');
 
